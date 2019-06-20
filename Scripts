@@ -1,0 +1,77 @@
+Usage: each line could be copied as is and pasted into powershell cli or script can be saved as .ps1 file to run on cli ( if saved as .PS1 file, script needs to be digitally signed).
+
+----------------------------------------------------------------------------------------------------
+
+######### returns shares that have explicitly defined ACLs######### 
+
+$ShareSec = Get-WMIObject -class win32_LogicalShareSecuritySetting -comp $ENV:COMPUTERNAME         ####Shows share security setting
+foreach($Share in $ShareSec) {$ShareName = $Share.Name             ####for loop to select each individual share
+$ACLS = $Share.GetSecurityDescriptor().Descriptor.DACL             ####Shows share ACL information 
+foreach($ACL in $ACLS) {$User = $ACL.Trustee.Name}		   ####For loop that selects each share and shows the group it belongs to 
+switch($ACL.AccessMask){2032127{$Perm = "Full Control"}   1245631{$Perm = "Change"}   1179817{$Perm = "Read"}}      ####Changes numerical Access MAsk values to names 
+$myobj = "" |Select-Object ShareName,User,Permission               #####Everythng from this line formats 
+$myobj.ShareName = $ShareName
+$myobj.User = $User
+$myobj.Permission = $Perm
+$myobj}								    ##### returns output
+
+
+----------------------------------------------------------------------------------------------------
+
+##########Recursively looks at folders and their user permissions########## 
+
+
+$FolderPath = Get-ChildItem -Directory -Path "[DIRECTORY WITHIN QUOTES]" -Recurse -Force -ErrorAction SilentlyContinue
+
+
+#####To return output to CSV, save this script to a variable then pipe variable to export-csv to save as csv. otherwise will return on intreface#####
+
+ForEach ($Folder in $FolderPath) {
+   $Acl = Get-Acl -Path $Folder.FullName
+   ForEach ($Item in $Acl.Access) {
+$Properties = [ordered]@{'Server Name'=$ENV:COMPUTERNAME;'Folder Name'=$Folder.FullName;'Group/User'=$Item.IdentityReference;'Permissions'=$Item.FileSystemRights;'Inherited'=$Item.IsInherited;'ACL Type'=$Item.AccessControlType}
+New-Object -TypeName PSObject -Property $Properties
+           }
+}
+
+
+##########Same as above modified to work with server2008########## 
+
+$FolderPath = Get-ChildItem -Path "directory, use without quotes" -Recurse -Force 
+
+ForEach ($Folder in $FolderPath) {
+   $Acl = Get-Acl $Folder.FullName
+   ForEach ($Item in $Acl.Access) {
+$Properties =  @{'Server Name'=$ENV:COMPUTERNAME;'Folder Name'=$Folder.FullName;'Group/User'=$Item.IdentityReference;'Permissions'=$Item.FileSystemRights;'Inherited'=$Item.IsInherited;'ACL Type'=$Item.AccessControlType}             
+New-Object -TypeName PSObject -Property $Properties
+           }
+}
+
+
+
+##########Export above to csv##########
+$Variable_Given_to_above_script | export-csv .\$ENV:COMPUTERNAME-Permissions.csv -NoTypeInformation 
+
+-------------------------------------------------------------------------------------------------
+
+#####uninstall Apps#####
+$Apps = "Microsoft.Windows.ParentalControls", "Windows.ContactSupport", "Microsoft.Xbox*", "microsoft.windowscommunicationsapps", "Microsoft.SkypeApp", "Microsoft.Zune*", "Microsoft.WindowsPhone", "Microsoft.WindowsMaps","Microsoft.Office.OneNote", "Microsoft.Office.Sway", "Microsoft.Appconnector", "Microsoft.WindowsFeedback*", "Microsoft.Windows.FeatureOnDemand.InsiderHub", "Microsoft.Windows.Cortana", "Microsoft.People", "Microsoft.Bing*", "Microsoft.Getstarted", "Microsoft.MicrosoftOfficeHub", "Microsoft.MicrosoftSolitaireCollection", "Microsoft.WindowsSoundRecorder", "Microsoft.3DBuilder", "Microsoft.Messaging", "Microsoft.CommsPhone", "Microsoft.Advertising.Xaml", "Microsoft.Windows.SecondaryTileExperience", "Microsoft.Windows.ParentalControls", "Microsoft.Windows.ContentDeliveryManager", "Microsoft.Windows.CloudExperienceHost", "Microsoft.Windows.ShellExperienceHost", "Microsoft.BioEnrollment", "Microsoft.OneConnect", "*Twitter*", "king.com.CandyCrushSodaSaga", "flaregamesGmbH.RoyalRevolt2", "*Netflix", "Facebook.Facebook", "Microsoft.MinecraftUWP", "*MarchofEmpires" 
+foreach ($App in $Apps) {Get-AppxPackage -allusers $App | Remove-AppxPackage
+ Get-AppxProvisionedPackage -Online | Where-Object DisplayName -like $App | Remove-AppxProvisionedPackage -Online }
+
+####Run this on the top folder########
+####CHANGE APP FOLDER PERMISSIONS#####
+$acl = Get-Acl -Path <PATH TO FOLDER> 			#assigns command to get owner/access info		
+$acl.SetAccessRuleProtection($true,$false)		#sets access rules {$true protects access rules | $false removes inherited access rules }
+$acl.Access | ForEach-Object { $acl.AddAccessRule($_) | Out-Null }	#Adds the specified access control list (ACL) permission to the current file or directory. Out-Null hides output
+$ace = New-Object System.Security.AccessControl.FileSystemAccessRule( "USERNAME HERE", "FullControl", "Allow")		#adds user, permissions to directory
+$acl.AddAccessRule($ace) 
+Set-Acl <PATH TO FOLDER> -AclObject $acl
+
+####DELETE FOLDERS RECURSIVELY#####
+####WILL DELETE EVERYTHING WITHIN A DIRECTORY!!!######
+Remove-Item -Path <directory/Folders you want deleted/> -Recurse
+
+
+
+
